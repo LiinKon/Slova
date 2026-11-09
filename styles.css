@@ -395,3 +395,6 @@ select.input { appearance: none; -webkit-appearance: none; font-size: 15px; }
 }
 
 .ghost, .ghost * { animation: none !important; transition: none !important; }
+
+.syn { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.syn .chip { font-size: 15px; height: 38px; }
