@@ -257,7 +257,7 @@ svg { flex-shrink: 0; }
 .slots { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .slot { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .slot small { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.slot .box { width: 100%; min-height: 58px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; border: 2px dashed var(--border-2); background: var(--card-2); color: var(--faint); padding: 4px 6px; text-align: center; }
+.slot .box { font-family: inherit; cursor: pointer; width: 100%; min-height: 58px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; border: 2px dashed var(--border-2); background: var(--card-2); color: var(--faint); padding: 4px 6px; text-align: center; }
 .slot .box.active { border-color: var(--link); background: var(--soft); color: var(--link); }
 .slot .box.filled { border: 2px solid var(--link); background: var(--card); color: var(--ink); }
 .slot .box.ok { border: 2px solid var(--g); background: var(--ok-bg); color: var(--ok-fg); }
@@ -398,3 +398,6 @@ select.input { appearance: none; -webkit-appearance: none; font-size: 15px; }
 
 .syn { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .syn .chip { font-size: 15px; height: 38px; }
+
+.slot .box.filled:active { transform: scale(.95); }
+.slot .box { transition: transform .14s ease, background-color .2s ease, border-color .2s ease, color .2s ease; }
