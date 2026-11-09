@@ -596,23 +596,35 @@ SCREENS.big = () => {
   if (!ready) D.loadDict().then(() => { if (ui.route === 'big') render(); }).catch(() => toast('Словарь не загрузился'));
   const head = `<div class="big-head">
       <div style="display:flex;align-items:center;gap:12px"><button class="icon-btn" data-a="${ui.bigWord ? 'big-back' : 'home'}" aria-label="Назад">${I.back}</button>
-        <div><h1>Большой словарь</h1><div class="sub">Системный · англо-русский · работает офлайн</div></div></div>
-      <label class="search">${I.search}<span class="sr">Поиск в большом словаре</span><input data-in="big-q" value="${esc(ui.bigQ)}" placeholder="Английское слово" autocomplete="off" autocapitalize="off" spellcheck="false" lang="en"></label>
+        <div><h1>Большой словарь</h1><div class="sub">Системный · англ. ⇄ рус. · работает офлайн</div></div></div>
+      <label class="search">${I.search}<span class="sr">Поиск в большом словаре</span><input data-in="big-q" value="${esc(ui.bigQ)}" placeholder="Слово по-английски или по-русски" autocomplete="off" autocapitalize="off" spellcheck="false" ></label>
     </div>`;
   if (!ready) return `<main class="screen">${head}<p class="hint" style="text-align:center">Загружаю словарь…</p></main>`;
-  if (ui.bigWord) return `<main class="screen">${head}${entryHtml(ui.bigWord)}</main>`;
+  if (ui.bigWord) return `<main class="screen">${head}${ui.bigWord.startsWith('ru:') ? ruEntryHtml(ui.bigWord.slice(3)) : entryHtml(ui.bigWord)}</main>`;
   return `<main class="screen">${head}<div id="bigres">${bigResultsHtml()}</div></main>`;
 };
 function bigResultsHtml() {
   const q = ui.bigQ.trim();
-  if (!q) return `<p class="hint" style="text-align:center;padding:24px 10px">Начни вводить английское слово. Найденное можно сразу добавить в любой пак.</p>`;
-  const res = D.search(q, 40);
-  if (!res.length) {
-    const hit = D.lookup(q);
-    if (hit) return `<div class="sugg"><button data-key="s-${esc(hit.word)}" data-a="big-open" data-w="${esc(hit.word)}"><span lang="en">${esc(hit.word)}</span><small>${esc(D.shortTranslation(hit.groups, 3))}</small></button></div><p class="hint">Похоже на форму слова «${esc(hit.word)}».</p>`;
-    return `<p class="hint" style="text-align:center;padding:24px 10px">Такого слова в словаре нет.</p>`;
+  if (!q) return `<p class="hint" style="text-align:center;padding:24px 10px">Вводи слово по-английски или по-русски. Найденное можно сразу добавить в любой пак.</p>`;
+  if (D.isCyr(q)) {
+    const res = D.searchRu(q, 40);
+    if (!res.length) return `<p class="hint" style="text-align:center;padding:24px 10px" data-key="none">Такого русского слова в словаре нет.</p>`;
+    return `<div class="sugg">${res.map((r) => `<button data-key="r-${esc(r.ru)}" data-a="big-open" data-w="ru:${esc(r.ru)}"><span>${esc(r.ru)}</span><small lang="en">${esc(r.en.slice(0, 4).join(', '))}</small></button>`).join('')}</div>`;
   }
-  return `<div class="sugg">${res.map((k) => { const e = D.exact(k); return `<button data-key="s-${esc(k)}" data-a="big-open" data-w="${esc(k)}"><span lang="en">${esc(k)}</span><small>${esc(e ? D.shortTranslation(e.groups, 3) : '')}</small></button>`; }).join('')}</div>`;
+  const base = D.baseForm(q);
+  const res = D.search(q, 40).filter((k) => k !== base);
+  const baseRow = base ? (() => { const e = D.exact(base); return `<button data-key="s-${esc(base)}" data-a="big-open" data-w="${esc(base)}"><span><span lang="en">${esc(base)}</span><small style="display:block;max-width:none;font-size:12px">форма «${esc(q.toLowerCase())}»</small></span><small>${esc(e ? D.shortTranslation(e.groups, 3) : '')}</small></button>`; })() : '';
+  if (!res.length && !base) return `<p class="hint" style="text-align:center;padding:24px 10px" data-key="none">Такого слова в словаре нет.</p>`;
+  return `<div class="sugg">${baseRow}${res.map((k) => { const e = D.exact(k); return `<button data-key="s-${esc(k)}" data-a="big-open" data-w="${esc(k)}"><span lang="en">${esc(k)}</span><small>${esc(e ? D.shortTranslation(e.groups, 3) : '')}</small></button>`; }).join('')}</div>`;
+}
+function ruEntryHtml(word) {
+  const e = D.ruEntry(word);
+  if (!e) return '<p class="hint">Слово не найдено.</p>';
+  return `<div class="entry" style="gap:16px">
+    <span class="w">${esc(e.ru)}</span>
+    <div class="grp"><small>по-английски</small></div>
+  </div>
+  <div class="sugg" style="margin-top:-12px">${e.en.map((en) => { const x = D.exact(en); return `<button data-key="s-${esc(en)}" data-a="big-open" data-w="${esc(en)}"><span lang="en">${esc(en)}${x && x.ipa ? ` <small style="display:inline;color:var(--muted);font-weight:500">[${esc(x.ipa)}]</small>` : ''}</span><small>${esc(x ? D.shortTranslation(x.groups, 2) : '')}</small></button>`; }).join('')}</div>`;
 }
 function entryHtml(word) {
   const e = D.exact(word);
@@ -625,6 +637,7 @@ function entryHtml(word) {
       <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span class="w" lang="en">${esc(word)}</span>${e.ipa ? `<span class="ipa">[${esc(e.ipa)}]</span>` : ''}</div>
       ${ttsOn() ? `<button class="speak" data-a="speak-text" data-w="${esc(word)}" aria-label="Произнести слово">${I.speaker}</button>` : ''}</div>
     ${e.groups.map((g) => `<div class="grp"><small>${esc(posFull(g[0]))}</small>${g[1].map((t) => `<span>${esc(t)}</span>`).join('')}</div>`).join('')}
+    ${(() => { const sim = D.similar(word, 10); return sim.length ? `<div class="grp"><small>Похожие по смыслу</small><div class="syn">${sim.map((x) => `<button class="chip" data-a="big-open" data-w="${esc(x)}" lang="en">${esc(x)}</button>`).join('')}</div></div>` : ''; })()}
   </div>
   <div class="spacer"></div>
   ${mine ? `<p class="note-in" style="text-align:center">Уже в твоём словаре${where ? ': ' + esc(where) : ''}</p><button class="btn light" data-a="word" data-id="${mine.id}">Открыть карточку слова</button>`
@@ -1012,9 +1025,9 @@ const ACTIONS = {
     if (!confirm('Удалить «' + w.en + '»?')) return;
     deleteWords([w.id]); ui.overlay = null; save(); render();
   },
-  big: () => go('big', { bigWord: null }),
-  'big-open': (el) => { ui.bigWord = el.dataset.w; ui.anim = 'fwd'; render(); window.scrollTo(0, 0); },
-  'big-back': () => { ui.bigWord = null; ui.anim = 'back'; render(); },
+  big: () => go('big', { bigWord: null, bigStack: [] }),
+  'big-open': (el) => { ui.bigStack = ui.bigStack || []; if (ui.bigWord) ui.bigStack.push(ui.bigWord); ui.bigWord = el.dataset.w; ui.anim = 'fwd'; render(); window.scrollTo(0, 0); },
+  'big-back': () => { ui.bigWord = (ui.bigStack && ui.bigStack.pop()) || null; ui.anim = 'back'; render(); },
   'add-to-pack': (el) => {
     if (!S.packs.length) {
       const name = prompt('Паков пока нет. Название нового пака:', 'Мои слова');
@@ -1072,7 +1085,7 @@ document.addEventListener('click', (ev) => {
 document.addEventListener('input', (ev) => {
   const el = ev.target; const k = el.dataset && el.dataset.in; if (!k) return;
   if (k === 'dict-q') { ui.q = el.value; const box = document.getElementById('dlist'); if (box) M.morph(box, dictListHtml()); }
-  else if (k === 'big-q') { ui.bigQ = el.value; if (ui.bigWord) { ui.bigWord = null; render(); const i = document.querySelector('[data-in="big-q"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return; } const box = document.getElementById('bigres'); if (box) M.morph(box, bigResultsHtml()); }
+  else if (k === 'big-q') { ui.bigQ = el.value; if (ui.bigWord) { ui.bigWord = null; ui.bigStack = []; render(); const i = document.querySelector('[data-in="big-q"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return; } const box = document.getElementById('bigres'); if (box) M.morph(box, bigResultsHtml()); }
   else if (k === 'imp-name') ui.importData.name = el.value;
   else if (k === 'imp-custom') {
     ui.importData.custom = el.value.replace(/\D/g, ''); ui.importData.size = 'custom';
