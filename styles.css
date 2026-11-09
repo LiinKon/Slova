@@ -401,3 +401,13 @@ select.input { appearance: none; -webkit-appearance: none; font-size: 15px; }
 
 .slot .box.filled:active { transform: scale(.95); }
 .slot .box { transition: transform .14s ease, background-color .2s ease, border-color .2s ease, color .2s ease; }
+
+.drawer .ver { text-align: center; font-size: 12px; font-weight: 600; color: var(--faint); padding-top: 12px; }
+
+.slot .fix { font-size: 13px; font-weight: 600; color: var(--ok-fg); background: var(--ok-bg); padding: 4px 10px; border-radius: 10px; text-align: center; animation: rowIn .3s var(--ease-out) .15s both; }
+.slot .fix b { font-weight: 800; }
+.vresult { width: 100%; border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.vresult.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.vresult.bad { background: var(--bad-bg); color: var(--bad-fg); }
+.vresult b { font-size: 15px; font-weight: 800; }
+.vresult span { font-size: 14px; font-weight: 700; }
