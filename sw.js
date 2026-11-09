@@ -1,5 +1,5 @@
 // Офлайн-работа: все файлы приложения кладутся в кэш при первой загрузке.
-const VERSION = 'slova-v1.1';
+const VERSION = 'slova-v2';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/store.js', 'js/srs.js', 'js/importer.js', 'js/dict.js', 'js/tts.js',

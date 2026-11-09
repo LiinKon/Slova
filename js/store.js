@@ -7,6 +7,7 @@ export const DEFAULT_SETTINGS = {
   newPerDay: 12,
   direction: 'mixed',      // 'enru' | 'ruen' | 'mixed'
   autoNext: false,
+  tts: true,
   autoSpeak: true,
   accent: 'en-GB',         // 'en-GB' | 'en-US'
   rate: 0.9,
