@@ -6,6 +6,9 @@ import { speak, englishVoices, ttsAvailable } from './tts.js';
 import { VERBS } from '../data/verbs.js';
 import * as M from './motion.js';
 
+// Версия приложения: меняй при каждом обновлении вместе с VERSION в sw.js
+export const APP_VERSION = '0.7';
+export const APP_DATE = '09.11.2026';
 const DAY = 86400000;
 let S = null;
 const ui = {
@@ -712,16 +715,18 @@ SCREENS.verbs = () => {
   const ok3 = altOf(v[2]).includes(c.v3.trim().toLowerCase());
   const boxCls = (val, ok, active, key) => (c.checked ? (ok ? 'ok' + (c.justChecked ? ' pulse' : '') : 'bad' + (c.justChecked ? ' shake' : '')) : val ? 'filled' + (c.justFilled === key ? ' pop-fill' : '') : active ? 'active' : '');
   const slots = vs.mode === 'choose'
-    ? `<div class="slot"><small>Past Simple</small><button class="box ${boxCls(c.v2, ok2, !c.v2, 'v2')}" data-a="vslot" data-k="v2" ${c.checked || !c.v2 ? 'aria-disabled="true"' : 'aria-label="Убрать ' + esc(c.v2) + '"'}>${esc(c.v2 || '?')}</button></div>
-       <div class="slot"><small>Past Participle</small><button class="box ${boxCls(c.v3, ok3, (c.v2 || c.v3) && !c.v3 && !!c.v2, 'v3')}" data-a="vslot" data-k="v3" ${c.checked || !c.v3 ? 'aria-disabled="true"' : 'aria-label="Убрать ' + esc(c.v3) + '"'}>${esc(c.v3 || '?')}</button></div>`
-    : `<div class="slot"><label for="v2" style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Past Simple</label><input id="v2" data-in="v2" value="${esc(c.v2)}" class="${c.checked ? (ok2 ? 'ok' : 'bad') : ''}" autocapitalize="off" autocomplete="off" spellcheck="false" ${c.checked ? 'readonly' : ''}></div>
-       <div class="slot"><label for="v3" style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Past Participle</label><input id="v3" data-in="v3" value="${esc(c.v3)}" class="${c.checked ? (ok3 ? 'ok' : 'bad') : ''}" autocapitalize="off" autocomplete="off" spellcheck="false" ${c.checked ? 'readonly' : ''}></div>`;
+    ? `<div class="slot"><small>Past Simple</small><button class="box ${boxCls(c.v2, ok2, !c.v2, 'v2')}" data-a="vslot" data-k="v2" ${c.checked || !c.v2 ? 'aria-disabled="true"' : 'aria-label="Убрать ' + esc(c.v2) + '"'}>${esc(c.v2 || '?')}</button>${c.checked && !ok2 ? `<span class="fix">верно: <b lang="en">${esc(v[1].replace(/\//g, ' / '))}</b></span>` : ''}</div>
+       <div class="slot"><small>Past Participle</small><button class="box ${boxCls(c.v3, ok3, (c.v2 || c.v3) && !c.v3 && !!c.v2, 'v3')}" data-a="vslot" data-k="v3" ${c.checked || !c.v3 ? 'aria-disabled="true"' : 'aria-label="Убрать ' + esc(c.v3) + '"'}>${esc(c.v3 || '?')}</button>${c.checked && !ok3 ? `<span class="fix">верно: <b lang="en">${esc(v[2].replace(/\//g, ' / '))}</b></span>` : ''}</div>`
+    : `<div class="slot"><label for="v2" style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Past Simple</label><input id="v2" data-in="v2" value="${esc(c.v2)}" class="${c.checked ? (ok2 ? 'ok' : 'bad') : ''}" autocapitalize="off" autocomplete="off" spellcheck="false" ${c.checked ? 'readonly' : ''}>${c.checked && !ok2 ? `<span class="fix">верно: <b lang="en">${esc(v[1].replace(/\//g, ' / '))}</b></span>` : ''}</div>
+       <div class="slot"><label for="v3" style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Past Participle</label><input id="v3" data-in="v3" value="${esc(c.v3)}" class="${c.checked ? (ok3 ? 'ok' : 'bad') : ''}" autocapitalize="off" autocomplete="off" spellcheck="false" ${c.checked ? 'readonly' : ''}>${c.checked && !ok3 ? `<span class="fix">верно: <b lang="en">${esc(v[2].replace(/\//g, ' / '))}</b></span>` : ''}</div>`;
   return `<main class="screen">
     <div class="topbar"><button class="icon-btn" data-a="home" aria-label="Закончить">${I.close}</button>
       <h1 style="font-size:17px">Неправильные глаголы<span class="sub">${vs.idx + 1} из ${vs.list.length} · <span class="lv w-${SRS.levelKey(p.level)}" style="margin-left:0">${esc(SRS.toNextText(p))}</span></span></h1></div>
     <div class="seg"><button class="${vs.mode === 'choose' ? 'on' : ''}" data-a="vmode" data-v="choose">Выбор форм</button><button class="${vs.mode === 'type' ? 'on' : ''}" data-a="vmode" data-v="type">Ввод с клавиатуры</button></div>
     <div class="vcard ${vs.anim === 'card' ? 'card-in' : ''}"><div style="display:flex;flex-direction:column;align-items:center;gap:4px"><span class="word" lang="en">${esc(v[0])}</span><span class="tr">${esc(v[3])}</span></div>
-      <hr><span class="hint" style="font-size:14px;font-weight:700">${c.checked ? (ok2 && ok3 ? 'Верно!' : 'Правильно: ' + esc(v[1]) + ' · ' + esc(v[2])) : (vs.mode === 'choose' && (c.v2 || c.v3) ? 'Нажми на форму, чтобы убрать её' : 'Заполни две формы глагола')}</span>
+      <hr>${c.checked
+        ? `<div class="vresult ${ok2 && ok3 ? 'ok' : 'bad'}" data-key="vres" data-appear="pop"><b>${ok2 && ok3 ? 'Верно!' : ok2 || ok3 ? 'Почти: одна форма неверная' : 'Обе формы неверные'}</b><span lang="en">${esc(v[0])} — ${esc(v[1].replace(/\//g, ' / '))} — ${esc(v[2].replace(/\//g, ' / '))}</span></div>`
+        : `<span class="hint" style="font-size:14px;font-weight:700">${vs.mode === 'choose' && (c.v2 || c.v3) ? 'Нажми на форму, чтобы убрать её' : 'Заполни две формы глагола'}</span>`}
       <div class="slots">${slots}</div></div>
     ${vs.mode === 'choose' && !c.checked ? `<span class="hint" data-key="vlabel" style="font-size:13px;font-weight:700;padding-left:4px">Варианты</span>
       <div class="vchips" data-key="vchips" style="margin-top:-8px">${c.chips.map((ch) => `<button class="${ch.id === c.v2id || ch.id === c.v3id ? 'used' : ''}" data-key="vc-${ch.id}" data-a="vchip" data-v="${ch.id}" lang="en">${esc(ch.t)}</button>`).join('')}</div>` : ''}
@@ -790,7 +795,7 @@ SCREENS.settings = () => {
       <button class="set-row danger" data-a="reset-progress"><b>Сбросить весь прогресс</b></button>
       <button class="set-row danger" data-a="wipe"><b>Удалить все слова и паки</b></button>
     </div></section>
-    <p class="foot">Версия 0.1 · Все данные хранятся только на этом телефоне<br>Словарь: Викисловарь (CC BY-SA), произношения: CMUdict</p>
+    <p class="foot">Версия ${APP_VERSION} от ${APP_DATE} · Все данные хранятся только на этом телефоне<br>Словарь: Викисловарь (CC BY-SA), произношения: CMUdict</p>
   </main>`;
 };
 function agoText(ts) {
@@ -852,7 +857,8 @@ function overlayHtml() {
       <hr>
       ${item('backup', 'backup', 'Резервная копия', '', false, true)}
       ${item('settings', 'settings', 'Настройки', '', ui.route === 'settings', true)}
-      <div class="note">Все слова и прогресс хранятся только на этом телефоне. Резервную копию можно сохранить в iCloud Drive.</div></nav>`;
+      <div class="note">Все слова и прогресс хранятся только на этом телефоне. Резервную копию можно сохранить в iCloud Drive.</div>
+      <div class="ver">Версия ${APP_VERSION} · ${APP_DATE}</div></nav>`;
   }
   const sheet = (inner, label) => back + `<div class="sheet ${still ? 'still' : ''}" role="dialog" aria-label="${esc(label)}"><span class="grab" aria-hidden="true"></span>${inner}</div>`;
   if (o.type === 'filters') {
