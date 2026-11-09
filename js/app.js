@@ -691,8 +691,10 @@ function startVerbs() {
 }
 function prepVerb() {
   const vs = ui.vs; const v = vs.list[vs.idx]; if (!v) return;
-  const chips = SRS.shuffle([altOf(v[1])[0], altOf(v[2])[0], ...fakeForms(v).slice(0, 4)]);
-  vs.cur = { chips: [...new Set(chips)], v2: '', v3: '', checked: false };
+  const correct = [altOf(v[1])[0], altOf(v[2])[0]]; // если формы совпадают — две одинаковые плашки
+  const fakes = fakeForms(v).filter((x) => !correct.includes(x)).slice(0, 4);
+  const chips = SRS.shuffle([...correct, ...fakes]).map((t, i) => ({ id: i, t }));
+  vs.cur = { chips, v2: '', v3: '', v2id: -1, v3id: -1, checked: false };
   vs.anim = 'card';
 }
 SCREENS.verbs = () => {
@@ -710,8 +712,8 @@ SCREENS.verbs = () => {
   const ok3 = altOf(v[2]).includes(c.v3.trim().toLowerCase());
   const boxCls = (val, ok, active, key) => (c.checked ? (ok ? 'ok' + (c.justChecked ? ' pulse' : '') : 'bad' + (c.justChecked ? ' shake' : '')) : val ? 'filled' + (c.justFilled === key ? ' pop-fill' : '') : active ? 'active' : '');
   const slots = vs.mode === 'choose'
-    ? `<div class="slot"><small>Past Simple</small><span class="box ${boxCls(c.v2, ok2, !c.v2, 'v2')}">${esc(c.v2 || '?')}</span></div>
-       <div class="slot"><small>Past Participle</small><span class="box ${boxCls(c.v3, ok3, c.v2 && !c.v3, 'v3')}">${esc(c.v3 || '?')}</span></div>`
+    ? `<div class="slot"><small>Past Simple</small><button class="box ${boxCls(c.v2, ok2, !c.v2, 'v2')}" data-a="vslot" data-k="v2" ${c.checked || !c.v2 ? 'aria-disabled="true"' : 'aria-label="Убрать ' + esc(c.v2) + '"'}>${esc(c.v2 || '?')}</button></div>
+       <div class="slot"><small>Past Participle</small><button class="box ${boxCls(c.v3, ok3, (c.v2 || c.v3) && !c.v3 && !!c.v2, 'v3')}" data-a="vslot" data-k="v3" ${c.checked || !c.v3 ? 'aria-disabled="true"' : 'aria-label="Убрать ' + esc(c.v3) + '"'}>${esc(c.v3 || '?')}</button></div>`
     : `<div class="slot"><label for="v2" style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Past Simple</label><input id="v2" data-in="v2" value="${esc(c.v2)}" class="${c.checked ? (ok2 ? 'ok' : 'bad') : ''}" autocapitalize="off" autocomplete="off" spellcheck="false" ${c.checked ? 'readonly' : ''}></div>
        <div class="slot"><label for="v3" style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Past Participle</label><input id="v3" data-in="v3" value="${esc(c.v3)}" class="${c.checked ? (ok3 ? 'ok' : 'bad') : ''}" autocapitalize="off" autocomplete="off" spellcheck="false" ${c.checked ? 'readonly' : ''}></div>`;
   return `<main class="screen">
@@ -719,10 +721,10 @@ SCREENS.verbs = () => {
       <h1 style="font-size:17px">Неправильные глаголы<span class="sub">${vs.idx + 1} из ${vs.list.length} · <span class="lv w-${SRS.levelKey(p.level)}" style="margin-left:0">${esc(SRS.toNextText(p))}</span></span></h1></div>
     <div class="seg"><button class="${vs.mode === 'choose' ? 'on' : ''}" data-a="vmode" data-v="choose">Выбор форм</button><button class="${vs.mode === 'type' ? 'on' : ''}" data-a="vmode" data-v="type">Ввод с клавиатуры</button></div>
     <div class="vcard ${vs.anim === 'card' ? 'card-in' : ''}"><div style="display:flex;flex-direction:column;align-items:center;gap:4px"><span class="word" lang="en">${esc(v[0])}</span><span class="tr">${esc(v[3])}</span></div>
-      <hr><span class="hint" style="font-size:14px;font-weight:700">${c.checked ? (ok2 && ok3 ? 'Верно!' : 'Правильно: ' + esc(v[1]) + ' · ' + esc(v[2])) : 'Заполни две формы глагола'}</span>
+      <hr><span class="hint" style="font-size:14px;font-weight:700">${c.checked ? (ok2 && ok3 ? 'Верно!' : 'Правильно: ' + esc(v[1]) + ' · ' + esc(v[2])) : (vs.mode === 'choose' && (c.v2 || c.v3) ? 'Нажми на форму, чтобы убрать её' : 'Заполни две формы глагола')}</span>
       <div class="slots">${slots}</div></div>
     ${vs.mode === 'choose' && !c.checked ? `<span class="hint" data-key="vlabel" style="font-size:13px;font-weight:700;padding-left:4px">Варианты</span>
-      <div class="vchips" data-key="vchips" style="margin-top:-8px">${c.chips.map((t) => `<button class="${t === c.v2 || t === c.v3 ? 'used' : ''}" data-a="vchip" data-v="${esc(t)}" lang="en">${esc(t)}</button>`).join('')}</div>` : ''}
+      <div class="vchips" data-key="vchips" style="margin-top:-8px">${c.chips.map((ch) => `<button class="${ch.id === c.v2id || ch.id === c.v3id ? 'used' : ''}" data-key="vc-${ch.id}" data-a="vchip" data-v="${ch.id}" lang="en">${esc(ch.t)}</button>`).join('')}</div>` : ''}
     <div class="spacer"></div>
     <div style="display:flex;gap:10px">
       ${c.checked ? `<button class="btn accent" data-key="vnext" data-appear="up" data-a="vnext">Дальше</button>`
@@ -1043,9 +1045,17 @@ const ACTIONS = {
     S.packs.push(p); addWordToPart(ui.overlay.word, p.parts[0].id);
   },
   verbs: () => startVerbs(),
-  vmode: (el) => { ui.vs.mode = el.dataset.v; ui.vs.cur.v2 = ''; ui.vs.cur.v3 = ''; render(); if (el.dataset.v === 'type') { const i = document.getElementById('v2'); if (i) i.focus(); } },
-  vchip: (el) => { const c = ui.vs.cur; if (c.checked) return; const t = el.dataset.v; if (t === c.v2 || t === c.v3) return; if (!c.v2) { c.v2 = t; c.justFilled = 'v2'; } else if (!c.v3) { c.v3 = t; c.justFilled = 'v3'; } render(); if (c.v2 && c.v3) setTimeout(() => { if (ui.vs && ui.vs.cur === c) { c.justFilled = null; checkVerb(); } }, 260); },
-  vreset: () => { ui.vs.cur.v2 = ''; ui.vs.cur.v3 = ''; render(); },
+  vmode: (el) => { ui.vs.mode = el.dataset.v; Object.assign(ui.vs.cur, { v2: '', v3: '', v2id: -1, v3id: -1 }); render(); if (el.dataset.v === 'type') { const i = document.getElementById('v2'); if (i) i.focus(); } },
+  vchip: (el) => {
+    const c = ui.vs.cur; if (c.checked) return;
+    const id = +el.dataset.v; const ch = c.chips.find((x) => x.id === id); if (!ch) return;
+    if (id === c.v2id) { c.v2 = ''; c.v2id = -1; render(); return; }
+    if (id === c.v3id) { c.v3 = ''; c.v3id = -1; render(); return; }
+    if (!c.v2) { c.v2 = ch.t; c.v2id = id; c.justFilled = 'v2'; } else if (!c.v3) { c.v3 = ch.t; c.v3id = id; c.justFilled = 'v3'; } else return;
+    render();
+  },
+  vslot: (el) => { const c = ui.vs.cur; if (c.checked) return; const k = el.dataset.k; if (!c[k]) return; c[k] = ''; c[k + 'id'] = -1; render(); },
+  vreset: () => { Object.assign(ui.vs.cur, { v2: '', v3: '', v2id: -1, v3id: -1 }); render(); },
   vcheck: () => checkVerb(),
   vnext: () => { ui.vs.idx++; prepVerb(); render(); },
   settings: () => go('settings'),
