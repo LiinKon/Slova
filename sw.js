@@ -1,8 +1,8 @@
 // Офлайн-работа: все файлы приложения кладутся в кэш при первой загрузке.
-const VERSION = 'slova-v2';
+const VERSION = 'slova-v3';
 const FILES = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
-  'js/app.js', 'js/store.js', 'js/srs.js', 'js/importer.js', 'js/dict.js', 'js/tts.js',
+  'js/app.js', 'js/store.js', 'js/srs.js', 'js/importer.js', 'js/dict.js', 'js/tts.js', 'js/motion.js',
   'vendor/fflate.js', 'data/verbs.js', 'data/dict.json',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'fonts/manrope-latin-500-normal.woff2', 'fonts/manrope-latin-600-normal.woff2', 'fonts/manrope-latin-700-normal.woff2', 'fonts/manrope-latin-800-normal.woff2',

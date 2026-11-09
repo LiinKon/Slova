@@ -4,6 +4,7 @@ import * as IMP from './importer.js';
 import * as D from './dict.js';
 import { speak, englishVoices, ttsAvailable } from './tts.js';
 import { VERBS } from '../data/verbs.js';
+import * as M from './motion.js';
 
 const DAY = 86400000;
 let S = null;
@@ -131,6 +132,7 @@ function applyTheme() {
 mq.addEventListener && mq.addEventListener('change', () => S && applyTheme());
 
 /* ---------- рендер ---------- */
+let lastOv = null;
 const DEPTH = { home: 0, dict: 1, big: 1, verbs: 1, settings: 1, import: 1, part: 1, train: 2 };
 function go(route, opts = {}) {
   const from = ui.route;
@@ -143,29 +145,40 @@ function go(route, opts = {}) {
 function render() {
   const app = document.getElementById('app');
   const fn = SCREENS[ui.route] || SCREENS.home;
+  const dir = ui.anim;
+  const routeChanged = ui.lastRoute !== ui.route || !!dir;
+  const animate = ui.lastRoute !== undefined && !M.reduced();
+  const oldMain = app.querySelector(':scope > main');
+  const mainRect = oldMain ? oldMain.getBoundingClientRect() : null;
+  const oldOvNodes = [...app.querySelectorAll(':scope > .backdrop, :scope > .sheet, :scope > .drawer')];
+  const prevOv = lastOv;
+  let before = null;
+  if (animate && !routeChanged) before = M.snapshot(oldMain);
   let html = fn();
-  if (ui.anim) { html = html.replace('<main class="screen', '<main class="screen enter-' + ui.anim); ui.anim = null; }
-  app.innerHTML = html + overlayHtml();
+  if (dir) { html = html.replace('<main class="screen', '<main class="screen enter-' + dir); ui.anim = null; }
+  const ovHtml = overlayHtml();
+  const ovChanged = prevOv !== lastOv;
+  if (before && !ovChanged) for (const n of oldOvNodes) M.snapshot(n).forEach((v, k) => before.set(k, v));
+  const ovMeasured = animate && ovChanged && oldOvNodes.length ? M.measureOverlays(oldOvNodes) : null;
+  app.innerHTML = html + ovHtml;
+  ui.lastRoute = ui.route;
+  if (animate && routeChanged && oldMain) M.ghostScreen(oldMain, mainRect, dir);
+  if (ovMeasured) M.ghostOverlays(ovMeasured);
+  if (before) M.flip(app, before);
   afterRender();
 }
 function rerenderOverlay() {
   const app = document.getElementById('app');
-  app.querySelectorAll('.backdrop, .sheet, .drawer').forEach((n) => n.remove());
+  const old = [...app.querySelectorAll(':scope > .backdrop, :scope > .sheet, :scope > .drawer')];
+  const prevOv = lastOv;
+  const measured = M.reduced() ? null : M.measureOverlays(old);
+  old.forEach((n) => n.remove());
   app.insertAdjacentHTML('beforeend', overlayHtml());
+  if (measured && measured.length && prevOv !== lastOv) M.ghostOverlays(measured);
 }
-function closeOverlay(after) {
-  const nodes = document.querySelectorAll('#app .backdrop, #app .sheet, #app .drawer');
-  if (!nodes.length || reduceMotion()) { after(); return; }
-  nodes.forEach((n) => {
-    n.style.transition = n.classList.contains('backdrop') ? 'opacity .2s ease' : 'transform .2s cubic-bezier(.4,0,1,1)';
-    if (n.classList.contains('backdrop')) n.style.opacity = '0';
-    else n.style.transform = n.classList.contains('drawer') ? 'translateX(105%)' : 'translateY(105%)';
-  });
-  setTimeout(after, 200);
-}
+function closeOverlay(after) { after(); }
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function afterRender() {
-  ui.justExpanded = null; ui.justMore = null;
   const bar = document.querySelector('.progress i[data-to]');
   if (bar) requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = bar.dataset.to + '%'; }));
   if (ui.session) { ui.session.anim = null; if (ui.session.answered) ui.session.answered.fresh = false; }
@@ -218,12 +231,12 @@ SCREENS.home = () => {
         <button class="pill-btn" data-a="date-filter">${ui.dateFilter === 'all' ? 'Все даты' : esc(monthLabel(ui.dateFilter))} ${I.down}</button>
         <button class="dots-btn" data-a="menu" aria-label="Действия с паками" aria-expanded="${ui.menu}">${I.dots}</button>
       </div>
-      ${ui.menu ? `<div class="pop" role="menu">
+      ${ui.menu ? `<div class="pop" role="menu" data-key="pop" data-appear="pop">
         <button data-a="new-pack" role="menuitem">Создать свой пак</button>
         <button data-a="import" role="menuitem">Импорт из файла</button>
         <button data-a="collapse-all" role="menuitem">Свернуть все паки</button></div>` : ''}
     </div>
-    ${packs.length ? packs.map(packHtml).join('') : `<div class="empty"><b>${S.packs.length ? 'Нет паков за этот месяц' : 'Здесь появятся паки'}</b>${S.packs.length ? '' : 'Каждый импорт из Google становится паком с датой, большой пак делится на части.'}</div>`}
+    ${packs.length ? packs.map(packHtml).join('') : `<div class="empty" data-key="empty"><b>${S.packs.length ? 'Нет паков за этот месяц' : 'Здесь появятся паки'}</b>${S.packs.length ? '' : 'Каждый импорт из Google становится паком с датой, большой пак делится на части.'}</div>`}
   </main>`;
 };
 
@@ -231,7 +244,7 @@ function backupNag() {
   if (!S.settings.backupReminder || !words().length) return '';
   const now = Date.now();
   if (now - (S.lastBackup || S.createdAt) < 7 * DAY || now - (S.lastBackupNag || 0) < DAY) return '';
-  return `<div class="card" style="display:flex;align-items:center;gap:10px">
+  return `<div class="card" data-key="nag" style="display:flex;align-items:center;gap:10px">
     <span style="flex-grow:1;font-size:13px;font-weight:600">Давно не было резервной копии. Прогресс хранится только на этом телефоне.</span>
     <button class="small-btn" data-a="backup">Сохранить</button>
     <button class="icon-btn ghost" style="width:32px;height:32px" data-a="nag-close" aria-label="Скрыть">${I.x}</button></div>`;
@@ -251,23 +264,22 @@ function packHtml(p) {
   const open = multi && !!ui.expanded[p.id];
   const sub = slov(c.total) + (multi ? ' · ' + p.parts.length + ' ' + plural(p.parts.length, 'часть', 'части', 'частей') : '') + (done ? ' · всё выучено' : '');
   const main = multi
-    ? `<button class="main" data-a="toggle-pack" data-id="${p.id}" aria-expanded="${open}"><span><b>${esc(p.name)}</b><small>${sub}</small></span><span class="chev ${open ? 'open' : ''}">${I.down}</span></button>`
+    ? `<button class="main" data-a="toggle-pack" data-id="${p.id}" aria-expanded="${open}"><span><b>${esc(p.name)}</b><small>${sub}</small></span><span class="chev ${open ? 'open' : ''}" data-key="chev-${p.id}">${I.down}</span></button>`
     : `<button class="main" data-a="open-part" data-id="${p.parts[0] ? p.parts[0].id : ''}"><span><b>${esc(p.name)}</b><small>${sub}</small></span><span class="chev">${I.chevR}</span></button>`;
   let parts = '';
   if (open) {
     const all = !!ui.showAllParts[p.id];
     const shown = all ? p.parts : p.parts.slice(0, 4);
-    const anim = ui.justExpanded === p.id ? 0 : ui.justMore === p.id ? 4 : -1;
-    parts = `<div class="parts ${anim === 0 ? 'parts-in' : ''}"><small>Части</small>${shown.map((pt, i) => partHtml(pt, anim >= 0 && i >= anim ? i - anim : -1)).join('')}
-      ${p.parts.length > 4 ? `<button class="more-link" data-a="more-parts" data-id="${p.id}">${all ? 'Скрыть' : 'Показать ещё ' + (p.parts.length - 4) + ' ' + plural(p.parts.length - 4, 'часть', 'части', 'частей')}</button>` : ''}</div>`;
+    parts = `<div class="parts"><small data-key="pl-${p.id}">Части</small>${shown.map((pt) => partHtml(pt)).join('')}
+      ${p.parts.length > 4 ? `<button class="more-link" data-key="more-${p.id}" data-a="more-parts" data-id="${p.id}">${all ? 'Скрыть' : 'Показать ещё ' + (p.parts.length - 4) + ' ' + plural(p.parts.length - 4, 'часть', 'части', 'частей')}</button>` : ''}</div>`;
   }
-  return `<div class="pack"><div class="pack-card ${done ? 'done' : ''}">${main}
+  return `<div class="pack" data-key="pack-${p.id}"><div class="pack-card ${done ? 'done' : ''}">${main}
     <button class="icon-btn ghost" style="width:40px" data-a="pack-menu" data-id="${p.id}" aria-label="Действия с паком ${esc(p.name)}">${I.dots}</button></div>${parts}</div>`;
 }
 function partHtml(pt, delay = -1) {
   const c = levelCounts(pt.wordIds);
   const done = c.total > 0 && c.g === c.total;
-  return `<div class="part ${delay >= 0 ? 'part-in' : ''}" ${delay >= 0 ? `style="animation-delay:${delay * 45}ms"` : ''}><div class="part-card ${done ? 'done' : ''}">
+  return `<div class="part" data-key="pt-${pt.id}"><div class="part-card ${done ? 'done' : ''}">
     <button class="info" data-a="open-part" data-id="${pt.id}" style="text-align:left">
       <span class="top"><b>${esc(pt.name)}</b><small>${slov(c.total)}</small></span>${bar(c)}</button>
     <button class="icon-btn ghost" style="width:36px" data-a="part-menu" data-id="${pt.id}" aria-label="Действия с частью">${I.dots}</button></div></div>`;
@@ -287,7 +299,7 @@ SCREENS.part = () => {
   </main>`;
 };
 function rowWord(w) {
-  return `<button class="row-word" data-a="word" data-id="${w.id}">
+  return `<button class="row-word" data-key="w-${w.id}" data-a="word" data-id="${w.id}">
     <span class="t"><span class="en w-${SRS.levelKey(w.level)}">${esc(w.en)}</span><span class="ru">${esc(answerText(w))}</span></span>
     ${posOf(w) ? `<span class="tag">${esc(posOf(w))}</span>` : ''}</button>`;
 }
@@ -364,7 +376,7 @@ SCREENS.train = () => {
       else if (i === ans.pick) { cls = 'bad' + (ans.fresh ? ' shake' : ''); mark = 'Ваш ответ'; }
       else cls = 'dim';
     }
-    return `<button class="opt ${cls} ${cardIn ? 'opt-in' : ''}" ${cardIn ? `style="animation-delay:${80 + i * 50}ms"` : ''} data-a="pick" data-i="${i}" ${ans ? 'aria-disabled="true"' : ''}><span>${esc(o)}</span>${mark ? `<small>${mark}</small>` : ''}</button>`;
+    return `<button class="opt ${cls} ${cardIn ? 'opt-in' : ''}" ${cardIn ? `style="animation-delay:${80 + i * 50}ms"` : ''} data-a="pick" data-i="${i}" ${ans ? 'aria-disabled="true"' : ''}><span>${esc(o)}</span>${mark ? `<small data-key="mark-${i}" data-appear="pop">${mark}</small>` : ''}</button>`;
   }).join('');
   const full = w.groups && w.lemma === w.key ? w.groups.map((g) => g[1].slice(0, 3).join(', ')).join('; ') : (w.ru || answerText(w));
   return `<main class="screen train">
@@ -378,9 +390,9 @@ SCREENS.train = () => {
       ${ttsOn() && (c.dir === 'enru' || ans) ? `<button class="speak" data-a="speak" data-id="${w.id}" aria-label="Произнести слово">${I.speaker}</button>` : ''}
     </div>
     <div class="options">${opts}</div>
-    ${ans ? `<div class="feedback ${ans.ok ? 'ok' : 'bad'} ${ans.fresh ? 'fb-in' : ''}"><span><b>${ans.ok ? 'Верно!' : 'Не то слово'}</b><span>${esc(w.en)} — ${esc(full)}</span></span>
+    ${ans ? `<div class="feedback ${ans.ok ? 'ok' : 'bad'}" data-key="fb" data-appear="up"><span><b>${ans.ok ? 'Верно!' : 'Не то слово'}</b><span>${esc(w.en)} — ${esc(full)}</span></span>
       <button class="btn dark" data-a="next-card">Дальше</button></div>`
-      : `<button class="btn text" data-a="dont-know">Не знаю — показать ответ</button>`}
+      : `<button class="btn text" data-key="dk" data-a="dont-know">Не знаю — показать ответ</button>`}
   </main>`;
 };
 const POS_FULL = { 'сущ.': 'существительное', 'глаг.': 'глагол', 'прил.': 'прилагательное', 'нареч.': 'наречие', 'местоим.': 'местоимение', 'межд.': 'междометие', 'числ.': 'числительное' };
@@ -478,7 +490,7 @@ SCREENS.import = () => {
       <div><b>${skippedTotal}</b><small>пропущено</small></div></div>
     ${groups.length || dupes ? `<div class="card" style="padding:6px 14px">
       ${groups.length ? `<div style="display:flex;justify-content:space-between;align-items:center;min-height:44px"><b style="font-size:14px;font-weight:800">Что пропущено</b><small class="hint">не англ. → рус.</small></div>` : ''}
-      ${groups.map((g) => `<div class="skip-row"><span>${esc(g.label)}</span><span style="display:flex;align-items:center;gap:10px"><small>${g.items.length}</small>
+      ${groups.map((g) => `<div class="skip-row" data-key="skip-${g.key}"><span>${esc(g.label)}</span><span style="display:flex;align-items:center;gap:10px"><small>${g.items.length}</small>
         ${g.canInclude ? `<button class="small-btn ${g.include ? 'on' : ''}" data-a="imp-include" data-id="${g.key}" aria-pressed="${g.include}">${g.include ? 'Включено' : 'Включить'}</button>` : `<small style="font-weight:600">не англ.</small>`}</span></div>`).join('')}
       ${r.inFileDupes.length ? `<div class="skip-row"><small style="font-weight:600">Дубли в файле: ${esc(r.inFileDupes.slice(0, 6).join(', '))}${r.inFileDupes.length > 6 ? '…' : ''}</small></div>` : ''}
       ${r.already.length ? `<div class="skip-row"><small style="font-weight:600">Уже есть в словаре: ${r.already.length}</small></div>` : ''}
@@ -488,7 +500,7 @@ SCREENS.import = () => {
       <input id="packname" class="input" data-in="imp-name" value="${esc(d.name)}" autocomplete="off">
       <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:14px;font-weight:700">Разбить на части</b>
         <label class="switch"><input type="checkbox" data-in="imp-split" ${d.split ? 'checked' : ''} aria-label="Разбить на части"><span></span></label></div>
-      ${d.split ? `<div class="seg">
+      ${d.split ? `<div class="seg" data-key="imp-seg">
         <button class="${d.size === 25 ? 'on' : ''}" data-a="imp-size" data-v="25">по 25</button>
         <button class="${d.size === 50 ? 'on' : ''}" data-a="imp-size" data-v="50">по 50</button>
         <button class="${d.size === 'custom' ? 'on' : ''}" data-a="imp-size" data-v="custom">своё <input inputmode="numeric" data-in="imp-custom" value="${esc(d.custom)}" placeholder="—" aria-label="Своё количество слов в части"></button>
@@ -564,7 +576,7 @@ SCREENS.dict = () => {
       <label class="search">${I.search}<span class="sr">Поиск по словарю</span><input data-in="dict-q" value="${esc(ui.q)}" placeholder="Найти слово или перевод" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
       <button class="icon-btn dark" style="width:48px;height:48px;border-radius:16px" data-a="filters" aria-label="Фильтр и сортировка">${I.filter}</button>
     </div>
-    ${filtersActive() ? `<div class="shown"><small>Показано:</small>${chips.join('')}<button class="reset-all" data-a="reset-filters">${I.x} Сбросить всё</button></div>` : ''}
+    ${filtersActive() ? `<div class="shown" data-key="shown"><small>Показано:</small>${chips.join('')}<button class="reset-all" data-a="reset-filters">${I.x} Сбросить всё</button></div>` : ''}
     <div id="dlist">${dictListHtml()}</div>
   </main>`;
 };
@@ -572,8 +584,8 @@ function dictListHtml() {
   const list = filteredWords();
   const all = words().length;
   if (!all) return `<div class="empty"><b>Словарь пуст</b>Импортируй слова из Google или добавь их из большого словаря.</div>`;
-  const head = list.length !== all ? `<div class="counter">Найдено ${list.length} из ${all}</div>` : '';
-  if (!list.length) return head + `<div class="empty"><b>Ничего не нашлось</b>Попробуй другое слово или сбрось фильтры.</div>`;
+  const head = list.length !== all ? `<div class="counter" data-key="counter">Найдено ${list.length} из ${all}</div>` : '';
+  if (!list.length) return head + `<div class="empty" data-key="empty-d"><b>Ничего не нашлось</b>Попробуй другое слово или сбрось фильтры.</div>`;
   const max = 300;
   return head + `<div class="list" style="margin-top:8px">${list.slice(0, max).map(rowWord).join('')}</div>` + (list.length > max ? `<p class="hint" style="text-align:center">Показаны первые ${max}. Уточни поиск.</p>` : '');
 }
@@ -597,10 +609,10 @@ function bigResultsHtml() {
   const res = D.search(q, 40);
   if (!res.length) {
     const hit = D.lookup(q);
-    if (hit) return `<div class="sugg"><button data-a="big-open" data-w="${esc(hit.word)}"><span lang="en">${esc(hit.word)}</span><small>${esc(D.shortTranslation(hit.groups, 3))}</small></button></div><p class="hint">Похоже на форму слова «${esc(hit.word)}».</p>`;
+    if (hit) return `<div class="sugg"><button data-key="s-${esc(hit.word)}" data-a="big-open" data-w="${esc(hit.word)}"><span lang="en">${esc(hit.word)}</span><small>${esc(D.shortTranslation(hit.groups, 3))}</small></button></div><p class="hint">Похоже на форму слова «${esc(hit.word)}».</p>`;
     return `<p class="hint" style="text-align:center;padding:24px 10px">Такого слова в словаре нет.</p>`;
   }
-  return `<div class="sugg">${res.map((k) => { const e = D.exact(k); return `<button data-a="big-open" data-w="${esc(k)}"><span lang="en">${esc(k)}</span><small>${esc(e ? D.shortTranslation(e.groups, 3) : '')}</small></button>`; }).join('')}</div>`;
+  return `<div class="sugg">${res.map((k) => { const e = D.exact(k); return `<button data-key="s-${esc(k)}" data-a="big-open" data-w="${esc(k)}"><span lang="en">${esc(k)}</span><small>${esc(e ? D.shortTranslation(e.groups, 3) : '')}</small></button>`; }).join('')}</div>`;
 }
 function entryHtml(word) {
   const e = D.exact(word);
@@ -696,12 +708,12 @@ SCREENS.verbs = () => {
     <div class="vcard ${vs.anim === 'card' ? 'card-in' : ''}"><div style="display:flex;flex-direction:column;align-items:center;gap:4px"><span class="word" lang="en">${esc(v[0])}</span><span class="tr">${esc(v[3])}</span></div>
       <hr><span class="hint" style="font-size:14px;font-weight:700">${c.checked ? (ok2 && ok3 ? 'Верно!' : 'Правильно: ' + esc(v[1]) + ' · ' + esc(v[2])) : 'Заполни две формы глагола'}</span>
       <div class="slots">${slots}</div></div>
-    ${vs.mode === 'choose' && !c.checked ? `<span class="hint" style="font-size:13px;font-weight:700;padding-left:4px">Варианты</span>
-      <div class="vchips" style="margin-top:-8px">${c.chips.map((t) => `<button class="${t === c.v2 || t === c.v3 ? 'used' : ''}" data-a="vchip" data-v="${esc(t)}" lang="en">${esc(t)}</button>`).join('')}</div>` : ''}
+    ${vs.mode === 'choose' && !c.checked ? `<span class="hint" data-key="vlabel" style="font-size:13px;font-weight:700;padding-left:4px">Варианты</span>
+      <div class="vchips" data-key="vchips" style="margin-top:-8px">${c.chips.map((t) => `<button class="${t === c.v2 || t === c.v3 ? 'used' : ''}" data-a="vchip" data-v="${esc(t)}" lang="en">${esc(t)}</button>`).join('')}</div>` : ''}
     <div class="spacer"></div>
     <div style="display:flex;gap:10px">
-      ${c.checked ? `<button class="btn accent" data-a="vnext" data-a2="speak">Дальше</button>`
-        : `<button class="btn light" style="flex:1" data-a="vreset">Заново</button><button class="btn accent" style="flex:2" data-a="vcheck" ${c.v2 && c.v3 ? '' : 'disabled'}>Проверить</button>`}
+      ${c.checked ? `<button class="btn accent" data-key="vnext" data-appear="up" data-a="vnext">Дальше</button>`
+        : `<button class="btn light" data-key="vreset" style="flex:1" data-a="vreset">Заново</button><button class="btn accent" data-key="vcheck" style="flex:2" data-a="vcheck" ${c.v2 && c.v3 ? '' : 'disabled'}>Проверить</button>`}
     </div>
   </main>`;
 };
@@ -743,11 +755,11 @@ SCREENS.settings = () => {
     <section class="group"><h2>Озвучка</h2><div class="box">
       <div class="set-row"><span><b>Озвучка слов</b><small>${ttsAvailable() ? 'Встроенный голос iPhone, работает без интернета' : 'Этот браузер не умеет озвучивать текст'}</small></span>${sw('tts', 'Озвучка слов')}</div>
       ${st.tts !== false ? `
-      <div class="set-row"><b>Произносить слово автоматически</b>${sw('autoSpeak', 'Произносить автоматически')}</div>
-      <div class="set-row col"><b>Произношение</b>${seg('accent', [['en-GB', 'Британское'], ['en-US', 'Американское']])}</div>
-      <div class="set-row col"><span style="display:flex;justify-content:space-between"><b>Скорость речи</b><span class="val">${String(st.rate).replace('.', ',')}×</span></span>
+      <div class="set-row" data-key="tts-auto"><b>Произносить слово автоматически</b>${sw('autoSpeak', 'Произносить автоматически')}</div>
+      <div class="set-row col" data-key="tts-acc"><b>Произношение</b>${seg('accent', [['en-GB', 'Британское'], ['en-US', 'Американское']])}</div>
+      <div class="set-row col" data-key="tts-rate"><span style="display:flex;justify-content:space-between"><b>Скорость речи</b><span class="val">${String(st.rate).replace('.', ',')}×</span></span>
         <input class="range" type="range" min="0.5" max="1.3" step="0.1" value="${st.rate}" data-in="rate" aria-label="Скорость речи"></div>
-      <div class="set-row col"><label for="voice"><b>Голос</b><small>Голоса получше: Настройки iPhone → Универсальный доступ → Устный контент → Голоса → English</small></label>
+      <div class="set-row col" data-key="tts-voice"><label for="voice"><b>Голос</b><small>Голоса получше: Настройки iPhone → Универсальный доступ → Устный контент → Голоса → English</small></label>
         ${voices.length ? `<select id="voice" class="input" data-in="voice">${voices.map((v) => `<option value="${esc(v.voiceURI)}" ${curVoice && v.voiceURI === curVoice.voiceURI ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select>` : '<small>Голоса появятся после первого запуска озвучки.</small>'}
         <button class="btn light small" data-a="speak-text" data-w="Hello! Let's learn some new words today.">Проверить голос</button></div>` : ''}
     </div></section>
@@ -806,7 +818,6 @@ async function doRestore(file) {
 }
 
 /* ---------- оверлеи ---------- */
-let lastOv = null;
 function overlayHtml() {
   const o = ui.overlay; if (!o) { lastOv = null; return ''; }
   const still = lastOv === o.type;
@@ -843,9 +854,9 @@ function overlayHtml() {
       for (const pt of p.parts) targets.push({ id: pt.id, name: partTitle(p, pt), sub: (p.source === 'custom' ? 'Свой пак · ' : '') + slov(pt.wordIds.length) });
     }
     return sheet(`<h3>Добавить «${esc(o.word)}» в пак</h3><div style="display:flex;flex-direction:column">
-      ${targets.map((t) => `<button class="sheet-row" data-a="add-here" data-id="${t.id}" ${o.added ? 'disabled' : ''}><span><b>${esc(t.name)}</b><small>${esc(t.sub)}</small></span>${o.added === t.id ? '<span class="added">Добавлено</span>' : '<span class="radio"></span>'}</button>`).join('')}
-      ${!o.added ? `<button class="sheet-row" data-a="add-new-pack" style="color:var(--link);justify-content:flex-start;gap:10px;font-weight:800;font-size:16px">${I.plus} Новый пак</button>` : ''}</div>
-      ${o.added ? '<button class="btn dark" data-a="close-ov">Готово</button>' : ''}`, 'Добавить в пак');
+      ${targets.map((t) => `<button class="sheet-row" data-a="add-here" data-id="${t.id}" ${o.added ? 'disabled' : ''}><span><b>${esc(t.name)}</b><small>${esc(t.sub)}</small></span>${o.added === t.id ? `<span class="added" data-key="added-${t.id}" data-appear="pop">Добавлено</span>` : '<span class="radio"></span>'}</button>`).join('')}
+      ${!o.added ? `<button class="sheet-row" data-key="add-new" data-a="add-new-pack" style="color:var(--link);justify-content:flex-start;gap:10px;font-weight:800;font-size:16px">${I.plus} Новый пак</button>` : ''}</div>
+      ${o.added ? '<button class="btn dark" data-key="add-done" data-appear="up" data-a="close-ov">Готово</button>' : ''}`, 'Добавить в пак');
   }
   if (o.type === 'pack-menu') {
     const p = S.packs.find((x) => x.id === o.id); if (!p) return '';
@@ -910,17 +921,8 @@ const ACTIONS = {
   'close-ov': () => closeOverlay(() => { const wasFilters = ui.overlay && ui.overlay.type === 'filters'; ui.overlay = null; if (wasFilters || ui.route === 'big') render(); else rerenderOverlay(); }),
   menu: () => { ui.menu = !ui.menu; render(); },
   'collapse-all': () => { ui.expanded = {}; ui.menu = false; render(); },
-  'toggle-pack': (el) => {
-    const id = el.dataset.id;
-    if (ui.expanded[id]) {
-      const parts = el.closest('.pack').querySelector('.parts');
-      el.querySelector('.chev') && el.querySelector('.chev').classList.remove('open');
-      if (parts && !reduceMotion()) { parts.classList.add('parts-out'); setTimeout(() => { ui.expanded[id] = false; render(); }, 170); return; }
-      ui.expanded[id] = false; render(); return;
-    }
-    ui.expanded[id] = true; ui.justExpanded = id; render();
-  },
-  'more-parts': (el) => { ui.showAllParts[el.dataset.id] = !ui.showAllParts[el.dataset.id]; ui.justMore = el.dataset.id; render(); },
+  'toggle-pack': (el) => { ui.expanded[el.dataset.id] = !ui.expanded[el.dataset.id]; render(); },
+  'more-parts': (el) => { ui.showAllParts[el.dataset.id] = !ui.showAllParts[el.dataset.id]; render(); },
   'open-part': (el) => go('part', { partId: el.dataset.id }),
   'pack-menu': (el) => { ui.overlay = { type: 'pack-menu', id: el.dataset.id }; rerenderOverlay(); },
   'part-menu': (el) => { ui.overlay = { type: 'part-menu', id: el.dataset.id }; rerenderOverlay(); },
@@ -1069,8 +1071,8 @@ document.addEventListener('click', (ev) => {
 
 document.addEventListener('input', (ev) => {
   const el = ev.target; const k = el.dataset && el.dataset.in; if (!k) return;
-  if (k === 'dict-q') { ui.q = el.value; const box = document.getElementById('dlist'); if (box) box.innerHTML = dictListHtml(); }
-  else if (k === 'big-q') { ui.bigQ = el.value; if (ui.bigWord) { ui.bigWord = null; render(); const i = document.querySelector('[data-in="big-q"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return; } const box = document.getElementById('bigres'); if (box) box.innerHTML = bigResultsHtml(); }
+  if (k === 'dict-q') { ui.q = el.value; const box = document.getElementById('dlist'); if (box) M.morph(box, dictListHtml()); }
+  else if (k === 'big-q') { ui.bigQ = el.value; if (ui.bigWord) { ui.bigWord = null; render(); const i = document.querySelector('[data-in="big-q"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return; } const box = document.getElementById('bigres'); if (box) M.morph(box, bigResultsHtml()); }
   else if (k === 'imp-name') ui.importData.name = el.value;
   else if (k === 'imp-custom') {
     ui.importData.custom = el.value.replace(/\D/g, ''); ui.importData.size = 'custom';
@@ -1088,8 +1090,8 @@ document.addEventListener('input', (ev) => {
 });
 document.addEventListener('change', (ev) => {
   const el = ev.target; const k = el.dataset && el.dataset.in; if (!k) return;
-  if (k === 'imp-split') { ui.importData.split = el.checked; render(); }
-  else if (k === 'set-bool') { S.settings[el.dataset.k] = el.checked; save(); if (el.dataset.k === 'tts') { if (!el.checked && window.speechSynthesis) speechSynthesis.cancel(); render(); } }
+  if (k === 'imp-split') { ui.importData.split = el.checked; setTimeout(render, 160); }
+  else if (k === 'set-bool') { S.settings[el.dataset.k] = el.checked; save(); if (el.dataset.k === 'tts') { if (!el.checked && window.speechSynthesis) speechSynthesis.cancel(); setTimeout(render, 160); } }
   else if (k === 'voice') { S.settings.voiceURI = el.value; save(); speak('Hello!', S.settings); }
 });
 document.addEventListener('keydown', (ev) => {
